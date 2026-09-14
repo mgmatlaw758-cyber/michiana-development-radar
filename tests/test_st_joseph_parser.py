@@ -3,9 +3,28 @@ from __future__ import annotations
 from decimal import Decimal
 
 from michiana_radar.parsers.elkhart import Page
-from michiana_radar.parsers.st_joseph import parse_commercial_report_pages
+from michiana_radar.parsers.st_joseph import (
+    parse_commercial_report_pages,
+    report_period_from_pages,
+)
 
 SOURCE_URL = "https://southbendin.gov/reports/commercial-example.pdf"
+
+
+def test_reads_reporting_period_from_pdf_content() -> None:
+    pages = [
+        Page(
+            number=1,
+            text="""
+            COMMERCIAL REPORT
+            9/1/2026
+            1
+            FOR THE MONTH OF AUGUST, 2026
+            """,
+        )
+    ]
+
+    assert report_period_from_pages(pages) == "2026-08"
 
 
 def test_parses_city_county_commercial_rows() -> None:
