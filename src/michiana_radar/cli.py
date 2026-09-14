@@ -8,6 +8,7 @@ from typing import Sequence
 
 from .grouping import group_permits
 from .parsers.elkhart import parse_permit_pages
+from .parsers.st_joseph import parse_commercial_report_pages
 from .pdf import extract_pdf_pages
 from .server import serve_dashboard
 from .storage import import_records
@@ -46,6 +47,38 @@ def build_parser() -> argparse.ArgumentParser:
             "Upsert records into this SQLite database and rebuild projects "
             "across every stored reporting period"
         ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write JSON to this path instead of stdout",
+    )
+    return parser
+
+
+def build_st_joseph_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="michiana-radar import-st-joseph",
+        description=(
+            "Parse and import a South Bend/St. Joseph County monthly "
+            "City-County Commercial Report PDF."
+        ),
+    )
+    parser.add_argument("pdf", type=Path, help="Downloaded commercial report PDF")
+    parser.add_argument(
+        "--source-url",
+        required=True,
+        help="Exact public South Bend source PDF URL retained with every record",
+    )
+    parser.add_argument(
+        "--source-period",
+        required=True,
+        help="Reporting period in YYYY-MM format, such as 2026-08",
+    )
+    parser.add_argument(
+        "--database",
+        type=Path,
+        help="Upsert records into this SQLite database",
     )
     parser.add_argument(
         "--output",
@@ -172,6 +205,49 @@ def _run_parse_command(argv: Sequence[str]) -> int:
     return 0
 
 
+def _run_st_joseph_command(argv: Sequence[str]) -> int:
+    parser = build_st_joseph_parser()
+    args = parser.parse_args(argv)
+    if not args.source_period or len(args.source_period) != 7:
+        parser.error("source-period must use YYYY-MM")
+
+    records = parse_commercial_report_pages(
+        extract_pdf_pages(args.pdf),
+        source_url=args.source_url,
+        source_period=args.source_period,
+    )
+    projects = group_permits(records)
+    payload: dict[str, object] = {
+        "source": {
+            "jurisdiction": "St. Joseph County",
+            "url": args.source_url,
+            "period": args.source_period,
+            "input_file": args.pdf.name,
+        },
+        "permit_count": len(records),
+        "probable_project_count": len(projects),
+        "permits": [record.to_dict() for record in records],
+        "projects": [project.to_dict() for project in projects],
+    }
+
+    if args.database:
+        summary = import_records(
+            args.database,
+            records,
+            jurisdiction="St. Joseph County",
+            source_url=args.source_url,
+            source_period=args.source_period,
+            input_file=args.pdf.name,
+        )
+        payload["database"] = {
+            "path": str(args.database),
+            **summary.to_dict(),
+        }
+
+    _write_json(payload, args.output)
+    return 0
+
+
 def _run_sync_command(argv: Sequence[str]) -> int:
     parser = build_sync_parser()
     args = parser.parse_args(argv)
@@ -217,6 +293,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_arguments = list(sys.argv[1:] if argv is None else argv)
     if raw_arguments[:1] == ["sync-elkhart"]:
         return _run_sync_command(raw_arguments[1:])
+    if raw_arguments[:1] == ["import-st-joseph"]:
+        return _run_st_joseph_command(raw_arguments[1:])
     if raw_arguments[:1] == ["serve"]:
         return _run_serve_command(raw_arguments[1:])
     return _run_parse_command(raw_arguments)
