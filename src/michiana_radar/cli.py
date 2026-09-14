@@ -9,6 +9,7 @@ from pypdf import PdfReader
 
 from .grouping import group_permits
 from .parsers.elkhart import Page, parse_permit_pages
+from .storage import import_records
 
 DEFAULT_SOURCE_URL = (
     "https://www.elkhartcountyplanninganddevelopment.com/Building.html"
@@ -43,6 +44,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include hidden noncommercial records for parser QA",
     )
     parser.add_argument(
+        "--database",
+        type=Path,
+        help=(
+            "Upsert records into this SQLite database and rebuild projects "
+            "across every stored reporting period"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         help="Write JSON to this path instead of stdout",
@@ -59,7 +68,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         commercial_buildings_only=not args.include_noncommercial,
     )
     projects = group_permits(records)
-    payload = {
+    payload: dict[str, object] = {
         "source": {
             "url": args.source_url,
             "period": args.source_period,
@@ -70,6 +79,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         "permits": [record.to_dict() for record in records],
         "projects": [project.to_dict() for project in projects],
     }
+
+    if args.database:
+        summary = import_records(
+            args.database,
+            records,
+            jurisdiction="Elkhart County",
+            source_url=args.source_url,
+            source_period=args.source_period,
+            input_file=args.pdf.name,
+        )
+        payload["database"] = {
+            "path": str(args.database),
+            **summary.to_dict(),
+        }
+
     output = json.dumps(payload, indent=2, sort_keys=True)
 
     if args.output:
