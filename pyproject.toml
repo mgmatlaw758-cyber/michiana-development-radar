@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "michiana-development-radar"
+version = "0.1.0"
+description = "Privacy-conscious permit ingestion for Michiana development intelligence"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pypdf>=5.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9",
+]
+
+[project.scripts]
+michiana-radar = "michiana_radar.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/michiana_radar"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
