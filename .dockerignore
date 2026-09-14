@@ -1,0 +1,13 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.py[cod]
+.venv
+venv
+build
+*.sqlite
+*.sqlite3
+*.db
+*.pdf
+*.json
