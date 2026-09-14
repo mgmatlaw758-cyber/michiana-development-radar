@@ -82,7 +82,7 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     .controls {
       display: grid;
-      grid-template-columns: minmax(240px, 2fr) repeat(4, minmax(130px, 1fr));
+      grid-template-columns: minmax(240px, 2fr) repeat(6, minmax(120px, 1fr));
       gap: 12px;
       padding: 16px;
       border-radius: 16px;
@@ -166,6 +166,8 @@ DASHBOARD_HTML = r"""<!doctype html>
       font-size: .72rem;
       font-weight: 750;
     }
+    "<span><strong>Jurisdiction:</strong> " +
+      escapeHtml(project.jurisdiction || "Not listed") + "</span>" +
     details { border-top: 1px solid var(--border); }
     summary {
       cursor: pointer;
@@ -215,7 +217,7 @@ DASHBOARD_HTML = r"""<!doctype html>
 </head>
 <body>
   <header class="shell">
-    <div class="eyebrow">Elkhart County intelligence</div>
+    <div class="eyebrow">Michiana development intelligence</div>
     <h1>Development Radar</h1>
     <p class="subtitle">
       Search current commercial construction activity without digging through
@@ -237,6 +239,12 @@ DASHBOARD_HTML = r"""<!doctype html>
       <label>
         City
         <select id="city"><option value="">All cities</option></select>
+      </label>
+      <label>
+        Jurisdiction
+        <select id="jurisdiction">
+          <option value="">All jurisdictions</option>
+        </select>
       </label>
       <label>
         Project type
@@ -271,6 +279,7 @@ DASHBOARD_HTML = r"""<!doctype html>
 
       var controls = {
         search: document.getElementById("search"),
+        jurisdiction: document.getElementById("jurisdiction"),
         city: document.getElementById("city"),
         projectType: document.getElementById("project-type"),
         minValue: document.getElementById("min-value"),
@@ -406,6 +415,11 @@ DASHBOARD_HTML = r"""<!doctype html>
 
         fillSelect(controls.city, data.facets.cities, "All cities");
         fillSelect(
+          controls.jurisdiction,
+          data.facets.jurisdictions,
+          "All jurisdictions"
+        );
+        fillSelect(
           controls.projectType,
           data.facets.project_types,
           "All project types"
@@ -424,6 +438,9 @@ DASHBOARD_HTML = r"""<!doctype html>
         var params = new URLSearchParams();
         if (controls.search.value.trim()) {
           params.set("q", controls.search.value.trim());
+        }
+        if (controls.jurisdiction.value) {
+          params.set("jurisdiction", controls.jurisdiction.value);
         }
         if (controls.city.value) params.set("city", controls.city.value);
         if (controls.projectType.value) {
@@ -464,6 +481,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       controls.search.addEventListener("input", queueLoad);
       controls.minValue.addEventListener("input", queueLoad);
       controls.city.addEventListener("change", loadProjects);
+      controls.jurisdiction.addEventListener("change", loadProjects);
       controls.projectType.addEventListener("change", loadProjects);
       controls.sort.addEventListener("change", loadProjects);
       document.getElementById("reset").addEventListener("click", function () {
@@ -929,6 +947,7 @@ class RadarRequestHandler(BaseHTTPRequestHandler):
             payload = query_project_feed(
                 self.server.database_path,
                 search=first("q"),
+                jurisdiction=first("jurisdiction"),
                 city=first("city"),
                 project_type=first("project_type"),
                 contractor=first("contractor"),

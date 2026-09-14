@@ -52,10 +52,12 @@ def test_feed_summarizes_and_groups_stored_projects(tmp_path: Path) -> None:
     }
     assert payload["result_count"] == 3
     assert payload["returned_count"] == 3
+    assert payload["facets"]["jurisdictions"] == ["Elkhart County"]
     assert payload["facets"]["cities"] == ["Goshen"]
     assert payload["facets"]["project_types"] == ["New building"]
 
     first = payload["projects"][0]
+    assert first["jurisdiction"] == "Elkhart County"
     assert first["permit_count"] == 2
     assert first["listed_permit_value_total"] == "520000.00"
     assert first["permit_numbers"] == ["BC-0471-2026", "BC-0469-2026"]
@@ -63,6 +65,18 @@ def test_feed_summarizes_and_groups_stored_projects(tmp_path: Path) -> None:
 
 def test_feed_searches_and_filters_projects(tmp_path: Path) -> None:
     database_path = build_database(tmp_path)
+
+    jurisdiction_match = query_project_feed(
+        database_path,
+        jurisdiction="Elkhart County",
+    )
+    assert jurisdiction_match["result_count"] == 3
+
+    jurisdiction_miss = query_project_feed(
+        database_path,
+        jurisdiction="St. Joseph County",
+    )
+    assert jurisdiction_miss["result_count"] == 0
 
     contractor_match = query_project_feed(
         database_path,

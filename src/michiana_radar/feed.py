@@ -61,6 +61,7 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
                     projects.grouping_status,
                     projects.listed_permit_value_total,
                     projects.max_listed_permit_value,
+                    permits.jurisdiction,
                     permits.permit_number,
                     permits.project_category,
                     permits.project_type,
@@ -112,6 +113,7 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
         )
         project["permits"].append(
             {
+                "jurisdiction": row["jurisdiction"],
                 "permit_number": row["permit_number"],
                 "project_category": row["project_category"],
                 "project_type": row["project_type"],
@@ -183,6 +185,7 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
                 "latest_issued_date": max(latest_dates, default=None),
                 "project_type": first_value("project_type"),
                 "description": first_value("description"),
+                "jurisdiction": first_value("jurisdiction"),
                 "site_address": first_value("site_address"),
                 "city": first_value("city"),
                 "state": first_value("state"),
@@ -256,6 +259,7 @@ def query_project_feed(
     database_path: Path,
     *,
     search: str = "",
+    jurisdiction: str = "",
     city: str = "",
     project_type: str = "",
     contractor: str = "",
@@ -281,6 +285,7 @@ def query_project_feed(
 
     all_projects = _load_projects(Path(database_path))
     normalized_search = search.strip().casefold()
+    normalized_jurisdiction = jurisdiction.strip().casefold()
     normalized_city = city.strip().casefold()
     normalized_type = project_type.strip().casefold()
     normalized_contractor = contractor.strip().casefold()
@@ -289,6 +294,11 @@ def query_project_feed(
     for project in all_projects:
         listed_value = _money(project["listed_permit_value_total"])
         if normalized_search and normalized_search not in _search_text(project):
+            continue
+        if (
+            normalized_jurisdiction
+            and project["jurisdiction"].casefold() != normalized_jurisdiction
+        ):
             continue
         if normalized_city and project["city"].casefold() != normalized_city:
             continue
@@ -368,6 +378,9 @@ def query_project_feed(
             "latest_issued_date": max(dates, default=None),
         },
         "facets": {
+            "jurisdictions": _unique(
+                [project["jurisdiction"] for project in all_projects]
+            ),
             "cities": _unique(
                 [project["city"] for project in all_projects]
             ),
