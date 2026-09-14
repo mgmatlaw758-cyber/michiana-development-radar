@@ -151,6 +151,11 @@ def test_projects_are_rebuilt_across_monthly_imports(tmp_path: Path) -> None:
         source_period="2026-06",
         input_file="june-2026-permits.pdf",
     )
+    with sqlite3.connect(database_path) as connection:
+        first_project_id = connection.execute(
+            "SELECT project_id FROM projects"
+        ).fetchone()[0]
+
     second = import_records(
         database_path,
         [august_permit],
@@ -173,5 +178,9 @@ def test_projects_are_rebuilt_across_monthly_imports(tmp_path: Path) -> None:
             ORDER BY permits.permit_number
             """
         ).fetchall()
+        rebuilt_project_id = connection.execute(
+            "SELECT project_id FROM projects"
+        ).fetchone()[0]
 
     assert rows == [("BC-1003-2026",), ("BC-1682-2026",)]
+    assert rebuilt_project_id == first_project_id

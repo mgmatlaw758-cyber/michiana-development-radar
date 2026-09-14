@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 VALID_SORTS = frozenset({"newest", "oldest", "value_desc", "value_asc"})
+PROJECT_ID_RE = re.compile(r"^project-[0-9a-f]{14}$")
 
 
 def _money(value: object) -> Decimal:
@@ -390,3 +392,14 @@ def query_project_feed(
         "offset": offset,
         "projects": page,
     }
+
+
+def get_project(database_path: Path, project_id: str) -> dict[str, Any]:
+    if PROJECT_ID_RE.fullmatch(project_id) is None:
+        raise ValueError("Invalid project ID")
+
+    for project in _load_projects(Path(database_path)):
+        if project["project_id"] == project_id:
+            return project
+
+    raise KeyError(f"Project not found: {project_id}")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -377,11 +378,40 @@ def _rebuild_projects(connection: sqlite3.Connection, *, now: str) -> int:
     projects = group_permits(
         _load_permits_from_connection(connection, visible_only=True)
     )
+    previous_memberships = {
+        row["record_id"]: row["project_id"]
+        for row in connection.execute(
+            "SELECT project_id, record_id FROM project_permits"
+        ).fetchall()
+    }
 
     connection.execute("DELETE FROM project_permits")
     connection.execute("DELETE FROM projects")
 
+    used_project_ids: set[str] = set()
     for project in projects:
+        previous_counts = Counter(
+            previous_memberships[permit.record_id]
+            for permit in project.permits
+            if permit.record_id in previous_memberships
+        )
+        previous_candidates = sorted(
+            previous_counts,
+            key=lambda project_id: (
+                -previous_counts[project_id],
+                project_id,
+            ),
+        )
+        project_id = next(
+            (
+                candidate
+                for candidate in previous_candidates
+                if candidate not in used_project_ids
+            ),
+            project.project_id,
+        )
+        used_project_ids.add(project_id)
+
         grouping_status = (
             "probable_companion_permits"
             if len(project.permits) > 1
@@ -398,7 +428,7 @@ def _rebuild_projects(connection: sqlite3.Connection, *, now: str) -> int:
             ) VALUES (?, ?, ?, ?, ?)
             """,
             (
-                project.project_id,
+                project_id,
                 grouping_status,
                 str(project.listed_permit_value_total),
                 str(project.max_listed_permit_value),
@@ -411,7 +441,7 @@ def _rebuild_projects(connection: sqlite3.Connection, *, now: str) -> int:
             VALUES (?, ?)
             """,
             [
-                (project.project_id, permit.record_id)
+                (project_id, permit.record_id)
                 for permit in project.permits
             ],
         )

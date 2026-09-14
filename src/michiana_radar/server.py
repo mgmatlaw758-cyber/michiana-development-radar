@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
+from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from .feed import query_project_feed
+from .feed import get_project, query_project_feed
+from .sync import OFFICIAL_HOSTS
 
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="en">
@@ -43,6 +46,8 @@ DASHBOARD_HTML = r"""<!doctype html>
 
     button, input, select { font: inherit; }
     a { color: #8fc8ff; }
+    .project-title { color: var(--text); text-decoration: none; }
+    .project-title:hover { color: var(--accent); }
     .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
     header { padding: 42px 0 22px; }
     .eyebrow {
@@ -359,7 +364,10 @@ DASHBOARD_HTML = r"""<!doctype html>
         return '<article class="card">' +
           '<div class="card-main">' +
             '<div class="card-top"><div>' + companion +
-              "<h2>" + escapeHtml(project.project_type || "Commercial project") + "</h2>" +
+              '<h2><a class="project-title" href="/projects/' +
+              encodeURIComponent(project.project_id) + '">' +
+              escapeHtml(project.project_type || "Commercial project") +
+              "</a></h2>" +
             '</div><div class="value">' +
               escapeHtml(money(project.listed_permit_value_total)) +
             "</div></div>" +
@@ -474,6 +482,352 @@ DASHBOARD_HTML = r"""<!doctype html>
 </html>
 """
 
+PROJECT_PAGE_SHELL = r"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__PAGE_TITLE__ | Michiana Development Radar</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #0b1015;
+      --panel: #121a22;
+      --panel-light: #18232d;
+      --border: #2b3945;
+      --text: #edf4f7;
+      --muted: #98a9b5;
+      --accent: #f5a623;
+      --accent-soft: #3e2c0f;
+      --green: #6ed7a5;
+      --shadow: 0 18px 48px rgba(0, 0, 0, .24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% -10%, #203649 0, transparent 35rem),
+        var(--background);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: #8fc8ff; }
+    button { font: inherit; }
+    .shell { width: min(1000px, calc(100% - 32px)); margin: 0 auto; }
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      padding: 24px 0;
+    }
+    .brand {
+      color: var(--accent);
+      font-size: .8rem;
+      font-weight: 850;
+      letter-spacing: .09em;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+    .back { color: var(--muted); text-decoration: none; }
+    .hero, .permit, .notice {
+      border: 1px solid var(--border);
+      background: rgba(18, 26, 34, .95);
+      box-shadow: var(--shadow);
+    }
+    .hero { border-radius: 18px; padding: clamp(22px, 4vw, 38px); }
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+    }
+    .badge {
+      display: inline-flex;
+      border: 1px solid #65481a;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #ffd07a;
+      padding: 4px 9px;
+      font-size: .75rem;
+      font-weight: 800;
+    }
+    h1 {
+      margin: 9px 0 10px;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      letter-spacing: -.045em;
+      line-height: 1;
+    }
+    .value {
+      color: var(--green);
+      font-size: clamp(1.7rem, 4vw, 2.6rem);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .description {
+      color: #d1dce2;
+      font-size: 1.08rem;
+      line-height: 1.55;
+      max-width: 780px;
+    }
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .fact {
+      border: 1px solid #263541;
+      border-radius: 11px;
+      background: #0d141a;
+      padding: 13px 14px;
+    }
+    .fact span {
+      display: block;
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 750;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .fact strong { overflow-wrap: anywhere; }
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    button {
+      width: auto;
+      min-height: 40px;
+      border: 1px solid #65481a;
+      border-radius: 9px;
+      background: var(--accent-soft);
+      color: #ffd07a;
+      cursor: pointer;
+      padding: 8px 13px;
+      font-weight: 800;
+    }
+    button:focus, a:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .record-id { color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
+    h2 { margin: 34px 0 14px; }
+    .permit-list { display: grid; gap: 12px; }
+    .permit { border-radius: 14px; padding: 19px; }
+    .permit-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+    }
+    .permit h3 { margin: 0 0 4px; }
+    .permit-value { color: var(--green); font-weight: 850; white-space: nowrap; }
+    .permit-meta {
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px 16px;
+      font-size: .86rem;
+      margin-top: 12px;
+    }
+    .permit-description { color: #d1dce2; line-height: 1.5; }
+    .source { display: inline-block; margin-top: 13px; font-weight: 750; }
+    .notice {
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.5;
+      margin: 24px 0 60px;
+      padding: 14px 16px;
+    }
+    @media (max-width: 650px) {
+      .shell { width: min(100% - 20px, 1000px); }
+      nav { align-items: flex-start; }
+      .hero-top, .permit-top { display: block; }
+      .value, .permit-value { margin-top: 12px; }
+      .facts { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="shell">
+    <a class="brand" href="/">Development Radar</a>
+    <a class="back" href="/">Back to project feed</a>
+  </nav>
+  <main class="shell">__CONTENT__</main>
+  <script>
+    (function () {
+      var button = document.getElementById("copy-link");
+      if (!button) return;
+      button.addEventListener("click", function () {
+        if (!navigator.clipboard) {
+          button.textContent = "Copy the browser URL";
+          return;
+        }
+        navigator.clipboard.writeText(window.location.href).then(function () {
+          button.textContent = "Link copied";
+          window.setTimeout(function () {
+            button.textContent = "Copy project link";
+          }, 1800);
+        }).catch(function () {
+          button.textContent = "Copy the browser URL";
+        });
+      });
+    }());
+  </script>
+</body>
+</html>
+"""
+
+
+def _display_money(value: object) -> str:
+    try:
+        amount = Decimal(str(value or "0"))
+    except InvalidOperation:
+        return "Value not listed"
+    return "$" + f"{amount:,.0f}"
+
+
+def _source_page_url(permit: dict[str, Any]) -> str | None:
+    raw_url = str(permit.get("source_url") or "")
+    parsed = urlsplit(raw_url)
+    if (
+        parsed.scheme.casefold() != "https"
+        or parsed.hostname is None
+        or parsed.hostname.casefold() not in OFFICIAL_HOSTS
+    ):
+        return None
+    pages = permit.get("source_pages") or []
+    fragment = f"page={pages[0]}" if pages else ""
+    return parsed._replace(fragment=fragment).geturl()
+
+
+def render_project_page(project: dict[str, Any]) -> str:
+    def text(value: object, fallback: str = "Not listed") -> str:
+        cleaned = str(value or "").strip()
+        return escape(cleaned or fallback)
+
+    location = ", ".join(
+        str(value)
+        for value in (
+            project.get("site_address"),
+            project.get("city"),
+            project.get("state"),
+            project.get("postal_code"),
+        )
+        if value
+    )
+    contractors = ", ".join(project.get("contractors") or [])
+    businesses = ", ".join(project.get("owner_businesses") or [])
+    status = (
+        "Probable companion permits"
+        if project["permit_count"] > 1
+        else "Single permit"
+    )
+
+    permit_cards: list[str] = []
+    for permit in project["permits"]:
+        source_url = _source_page_url(permit)
+        source_link = ""
+        if source_url is not None:
+            pages = permit.get("source_pages") or []
+            page_label = f", page {pages[0]}" if pages else ""
+            source_link = (
+                '<a class="source" href="'
+                + escape(source_url, quote=True)
+                + '" target="_blank" rel="noopener noreferrer">'
+                + "Open county source PDF"
+                + escape(page_label)
+                + "</a>"
+            )
+
+        permit_location = ", ".join(
+            str(value)
+            for value in (
+                permit.get("site_address"),
+                permit.get("city"),
+                permit.get("state"),
+                permit.get("postal_code"),
+            )
+            if value
+        )
+        parcels = ", ".join(permit.get("parcel_numbers") or [])
+        zoning = ", ".join(permit.get("zoning") or [])
+        permit_cards.append(
+            '<article class="permit">'
+            '<div class="permit-top"><div><h3>'
+            + text(permit.get("permit_number"))
+            + "</h3><span>"
+            + text(permit.get("project_type"))
+            + "</span></div><div class=\"permit-value\">"
+            + escape(_display_money(permit.get("estimated_cost")))
+            + "</div></div>"
+            '<p class="permit-description">'
+            + text(permit.get("description"), "No description listed.")
+            + "</p>"
+            '<div class="permit-meta"><span>Issued: '
+            + text(permit.get("issued_date"))
+            + "</span><span>Location: "
+            + text(permit_location)
+            + "</span><span>Contractor: "
+            + text(permit.get("general_contractor"))
+            + "</span><span>Parcel: "
+            + text(parcels)
+            + "</span><span>Zoning: "
+            + text(zoning)
+            + "</span></div>"
+            + source_link
+            + "</article>"
+        )
+
+    facts = [
+        ("Location", location),
+        ("Latest permit", project.get("latest_issued_date")),
+        ("Contractor", contractors),
+        ("Business", businesses),
+    ]
+    facts_html = "".join(
+        '<div class="fact"><span>'
+        + escape(label)
+        + "</span><strong>"
+        + text(value)
+        + "</strong></div>"
+        for label, value in facts
+    )
+    content = (
+        '<section class="hero"><div class="hero-top"><div><span class="badge">'
+        + escape(status)
+        + "</span><h1>"
+        + text(project.get("project_type"), "Commercial project")
+        + '</h1></div><div class="value">'
+        + escape(_display_money(project.get("listed_permit_value_total")))
+        + "</div></div>"
+        '<p class="description">'
+        + text(project.get("description"), "No project description listed.")
+        + '</p><div class="facts">'
+        + facts_html
+        + '</div><div class="actions"><button id="copy-link" type="button">'
+        + 'Copy project link</button><span class="record-id">'
+        + text(project.get("project_id"))
+        + "</span></div></section>"
+        "<h2>Permits in this project</h2>"
+        '<section class="permit-list">'
+        + "".join(permit_cards)
+        + "</section>"
+        '<aside class="notice">Permit values are amounts listed in the public '
+        "county reports and may not equal final construction cost. Companion "
+        "permits are grouped from shared project signals and should be checked "
+        "against the linked source documents.</aside>"
+    )
+    return (
+        PROJECT_PAGE_SHELL
+        .replace("__PAGE_TITLE__", text(project.get("project_type")))
+        .replace("__CONTENT__", content)
+    )
+
+
 
 class RadarHTTPServer(ThreadingHTTPServer):
     database_path: Path
@@ -528,8 +882,39 @@ class RadarRequestHandler(BaseHTTPRequestHandler):
                 "text/html; charset=utf-8",
             )
             return
+        if request.path.startswith("/projects/"):
+            project_id = request.path.removeprefix("/projects/").rstrip("/")
+            try:
+                project = get_project(self.server.database_path, project_id)
+            except (ValueError, KeyError):
+                self._send(
+                    404,
+                    b"Project not found",
+                    "text/plain; charset=utf-8",
+                )
+                return
+            self._send(
+                200,
+                render_project_page(project).encode("utf-8"),
+                "text/html; charset=utf-8",
+            )
+            return
         if request.path == "/api/health":
             self._send_json(200, {"status": "ok"})
+            return
+        if request.path.startswith("/api/projects/"):
+            project_id = request.path.removeprefix(
+                "/api/projects/"
+            ).rstrip("/")
+            try:
+                project = get_project(self.server.database_path, project_id)
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            except KeyError as exc:
+                self._send_json(404, {"error": str(exc.args[0])})
+                return
+            self._send_json(200, {"project": project})
             return
         if request.path != "/api/projects":
             self._send_json(404, {"error": "Not found"})

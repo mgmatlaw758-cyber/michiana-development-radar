@@ -22,6 +22,8 @@ permit export.
 - Keep an import ledger and every permit source observation
 - Browse a searchable local project feed with city, type and value filters
 - Open the original county source PDF for every displayed permit
+- Open a dedicated record page for each project and copy its direct link
+- Preserve project IDs when later companion permits join an existing project
 - Verify behavior against redacted fixtures derived from real August 2026 permits
 
 ## Product boundary
@@ -53,8 +55,12 @@ notification to open port 8000 or select port 8000 from the **Ports** panel.
 
 The dashboard searches descriptions, addresses, permit numbers, contractors,
 business names and parcel numbers. It can also filter by city, project type and
-minimum listed permit value. The server binds to 127.0.0.1 by default and does
-not alter the database.
+minimum listed permit value. Select a project title to open its dedicated record
+page. That page includes every grouped permit, parcel and zoning details, plus a
+link to the exact page in the original county PDF. Project IDs are retained when
+future imports add an ordinary companion permit to an existing project.
+
+The server binds to 127.0.0.1 by default and does not alter the database.
 
 ## Synchronize a full year
 

@@ -3,4 +3,4 @@
 from .models import PermitRecord, SourceRef
 
 __all__ = ["PermitRecord", "SourceRef"]
-__version__ = "0.4.0"
+__version__ = "0.5.0"

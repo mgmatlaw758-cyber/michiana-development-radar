@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import michiana_radar.cli as cli_module
-from michiana_radar.feed import query_project_feed
+from michiana_radar.feed import get_project, query_project_feed
+from michiana_radar.server import render_project_page
 from michiana_radar.parsers.elkhart import Page, parse_permit_pages
 from michiana_radar.storage import import_records
 
@@ -128,3 +131,33 @@ def test_cli_dispatches_serve_command(
         "host": "127.0.0.1",
         "port": 8765,
     }
+
+
+def test_project_lookup_returns_one_exact_project(tmp_path: Path) -> None:
+    database_path = build_database(tmp_path)
+    feed = query_project_feed(database_path)
+    project_id = feed["projects"][0]["project_id"]
+
+    project = get_project(database_path, project_id)
+
+    assert project["project_id"] == project_id
+    assert project["permit_count"] == 2
+
+    with pytest.raises(ValueError, match="Invalid project ID"):
+        get_project(database_path, "../radar.sqlite")
+    with pytest.raises(KeyError, match="Project not found"):
+        get_project(database_path, "project-00000000000000")
+
+
+def test_project_page_links_to_exact_source_pages(tmp_path: Path) -> None:
+    database_path = build_database(tmp_path)
+    project_id = query_project_feed(database_path)["projects"][0]["project_id"]
+
+    html = render_project_page(get_project(database_path, project_id))
+
+    assert "BC-0469-2026" in html
+    assert "BC-0471-2026" in html
+    assert "#page=18" in html
+    assert "#page=119" in html
+    assert "555-010" not in html
+    assert "REDACTED PERSONAL OWNER" not in html
