@@ -18,6 +18,7 @@ from .st_joseph_sync import (
 )
 from .storage import import_records
 from .sync import DEFAULT_SOURCE_PAGE_URL, sync_elkhart_year
+from .sync_all import sync_all_year
 
 DEFAULT_SOURCE_URL = DEFAULT_SOURCE_PAGE_URL
 
@@ -186,6 +187,45 @@ def build_st_joseph_sync_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_sync_all_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="michiana-radar sync-all",
+        description=(
+            "Synchronize every currently supported Michiana Development Radar "
+            "jurisdiction for one year."
+        ),
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        required=True,
+        help="Calendar/report year to synchronize, such as 2026",
+    )
+    parser.add_argument(
+        "--database",
+        type=Path,
+        required=True,
+        help="SQLite database that receives permits from every source",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path("build/source-cache"),
+        help="Base ignored directory used for source PDF caches",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Download source reports again instead of using valid cached PDFs",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the combined synchronization summary to this JSON file",
+    )
+    return parser
+
+
 def build_serve_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="michiana-radar serve",
@@ -349,6 +389,23 @@ def _run_st_joseph_sync_command(argv: Sequence[str]) -> int:
     return 1 if payload["failed_report_count"] else 0
 
 
+def _run_sync_all_command(argv: Sequence[str]) -> int:
+    parser = build_sync_all_parser()
+    args = parser.parse_args(argv)
+    if args.year < 2017 or args.year > 2100:
+        parser.error("year must be between 2017 and 2100")
+
+    payload = sync_all_year(
+        year=args.year,
+        database_path=args.database,
+        cache_directory=args.cache_dir,
+        refresh=args.refresh,
+        progress=lambda message: print(message, file=sys.stderr),
+    )
+    _write_json(payload, args.output)
+    return 1 if payload["failed_source_count"] else 0
+
+
 def _run_serve_command(argv: Sequence[str]) -> int:
     parser = build_serve_parser()
     args = parser.parse_args(argv)
@@ -369,6 +426,8 @@ def _run_serve_command(argv: Sequence[str]) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     raw_arguments = list(sys.argv[1:] if argv is None else argv)
+    if raw_arguments[:1] == ["sync-all"]:
+        return _run_sync_all_command(raw_arguments[1:])
     if raw_arguments[:1] == ["sync-elkhart"]:
         return _run_sync_command(raw_arguments[1:])
     if raw_arguments[:1] == ["sync-st-joseph"]:
