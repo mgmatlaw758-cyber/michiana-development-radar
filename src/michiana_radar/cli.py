@@ -11,6 +11,11 @@ from .parsers.elkhart import parse_permit_pages
 from .parsers.st_joseph import parse_commercial_report_pages
 from .pdf import extract_pdf_pages
 from .server import serve_dashboard
+from .st_joseph_sync import (
+    DEFAULT_BUILDING_PAGE_URL,
+    DEFAULT_MEDIA_API_URL,
+    sync_st_joseph_year,
+)
 from .storage import import_records
 from .sync import DEFAULT_SOURCE_PAGE_URL, sync_elkhart_year
 
@@ -118,6 +123,55 @@ def build_sync_parser() -> argparse.ArgumentParser:
         "--source-page-url",
         default=DEFAULT_SOURCE_PAGE_URL,
         help="Official Elkhart County page containing monthly export links",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Download reports again instead of using valid cached PDFs",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the synchronization summary to this JSON file",
+    )
+    return parser
+
+
+def build_st_joseph_sync_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="michiana-radar sync-st-joseph",
+        description=(
+            "Discover, download and import published South Bend/St. Joseph "
+            "County City-County Commercial Reports for one year."
+        ),
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        required=True,
+        help="Report year to synchronize, such as 2026",
+    )
+    parser.add_argument(
+        "--database",
+        type=Path,
+        required=True,
+        help="SQLite database that receives the synchronized permits",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path("build/source-cache/st-joseph"),
+        help="Ignored directory used for downloaded commercial report PDFs",
+    )
+    parser.add_argument(
+        "--source-page-url",
+        default=DEFAULT_BUILDING_PAGE_URL,
+        help="Official South Bend Building Department page",
+    )
+    parser.add_argument(
+        "--media-api-url",
+        default=DEFAULT_MEDIA_API_URL,
+        help="Official South Bend WordPress media API used for report discovery",
     )
     parser.add_argument(
         "--refresh",
@@ -271,6 +325,30 @@ def _run_sync_command(argv: Sequence[str]) -> int:
     return 1 if payload["failed_report_count"] else 0
 
 
+def _run_st_joseph_sync_command(argv: Sequence[str]) -> int:
+    parser = build_st_joseph_sync_parser()
+    args = parser.parse_args(argv)
+    if args.year < 2017 or args.year > 2100:
+        parser.error("year must be between 2017 and 2100")
+
+    try:
+        payload = sync_st_joseph_year(
+            year=args.year,
+            database_path=args.database,
+            cache_directory=args.cache_dir,
+            source_page_url=args.source_page_url,
+            media_api_url=args.media_api_url,
+            refresh=args.refresh,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+    except Exception as exc:
+        print(f"sync-st-joseph failed: {exc}", file=sys.stderr)
+        return 1
+
+    _write_json(payload, args.output)
+    return 1 if payload["failed_report_count"] else 0
+
+
 def _run_serve_command(argv: Sequence[str]) -> int:
     parser = build_serve_parser()
     args = parser.parse_args(argv)
@@ -293,6 +371,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     raw_arguments = list(sys.argv[1:] if argv is None else argv)
     if raw_arguments[:1] == ["sync-elkhart"]:
         return _run_sync_command(raw_arguments[1:])
+    if raw_arguments[:1] == ["sync-st-joseph"]:
+        return _run_st_joseph_sync_command(raw_arguments[1:])
     if raw_arguments[:1] == ["import-st-joseph"]:
         return _run_st_joseph_command(raw_arguments[1:])
     if raw_arguments[:1] == ["serve"]:
