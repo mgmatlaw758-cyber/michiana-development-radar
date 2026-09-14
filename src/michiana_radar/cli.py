@@ -9,6 +9,7 @@ from typing import Sequence
 from .grouping import group_permits
 from .parsers.elkhart import parse_permit_pages
 from .pdf import extract_pdf_pages
+from .server import serve_dashboard
 from .storage import import_records
 from .sync import DEFAULT_SOURCE_PAGE_URL, sync_elkhart_year
 
@@ -98,6 +99,31 @@ def build_sync_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_serve_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="michiana-radar serve",
+        description="Open the searchable Development Radar project feed.",
+    )
+    parser.add_argument(
+        "--database",
+        type=Path,
+        required=True,
+        help="Existing Michiana Development Radar SQLite database",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Interface to bind to; defaults to the local machine only",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Local dashboard port; defaults to 8000",
+    )
+    return parser
+
+
 def _write_json(payload: dict[str, object], output_path: Path | None) -> None:
     output = json.dumps(payload, indent=2, sort_keys=True)
     if output_path is None:
@@ -169,10 +195,30 @@ def _run_sync_command(argv: Sequence[str]) -> int:
     return 1 if payload["failed_report_count"] else 0
 
 
+def _run_serve_command(argv: Sequence[str]) -> int:
+    parser = build_serve_parser()
+    args = parser.parse_args(argv)
+    if args.port < 1 or args.port > 65535:
+        parser.error("port must be between 1 and 65535")
+
+    try:
+        serve_dashboard(
+            args.database,
+            host=args.host,
+            port=args.port,
+        )
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        print(f"serve failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     raw_arguments = list(sys.argv[1:] if argv is None else argv)
     if raw_arguments[:1] == ["sync-elkhart"]:
         return _run_sync_command(raw_arguments[1:])
+    if raw_arguments[:1] == ["serve"]:
+        return _run_serve_command(raw_arguments[1:])
     return _run_parse_command(raw_arguments)
 
 
