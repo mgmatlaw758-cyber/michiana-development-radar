@@ -8,6 +8,8 @@ the Elkhart County monthly permit export.
 
 ## What works
 
+- Discover all published Elkhart monthly permit reports for a selected year
+- Safely download and cache official county PDFs
 - Extract permit pages from an Elkhart County PDF
 - Merge adjacent continuation pages that repeat a permit number
 - Parse dates, values, descriptions, locations, parcels and business contractors
@@ -36,29 +38,33 @@ python -m pip install -e ".[dev]"
 pytest
 ~~~
 
-Parse a downloaded monthly export:
+## Synchronize a full year
+
+Discover, download and import every currently published Elkhart County monthly
+permit report for a year with one command:
 
 ~~~bash
-michiana-radar august-2026-permits.pdf \
-  --source-period 2026-08 \
-  --output build/elkhart-2026-08.json
+michiana-radar sync-elkhart \
+  --year 2026 \
+  --database build/radar.sqlite \
+  --output build/sync-elkhart-2026.json
 ~~~
 
-Commercial building permits are exported by default. Add
-`--include-noncommercial` for parser QA; those records remain hidden from alerts.
+Downloads are cached under `build/source-cache/elkhart/2026/`. Run the command
+again to reuse those files and test idempotency. Add `--refresh` when the county
+has replaced a previously published PDF and a fresh download is required.
 
-## Build a multi-month database
+The synchronization summary lists every discovered month, download status, record
+counts and any individual failures. A partial failure returns a nonzero exit code
+without discarding months that imported successfully.
 
-SQLite is built into Python, so this does not require a database account or server.
-Pass the same database path for every monthly report:
+The downloader only follows HTTPS PDF links on the official Elkhart County
+Planning and Development host. Raw reports, generated JSON and SQLite databases
+remain under ignored paths and should not be committed.
+
+## Parse one report manually
 
 ~~~bash
-michiana-radar build/june-2026-permits.pdf \
-  --source-url "https://www.elkhartcountyplanninganddevelopment.com/doc/2026/june-2026-permits.pdf" \
-  --source-period 2026-06 \
-  --database build/radar.sqlite \
-  --output build/elkhart-2026-06.json
-
 michiana-radar build/august-2026-permits.pdf \
   --source-url "https://www.elkhartcountyplanninganddevelopment.com/doc/2026/august-2026-permits.pdf" \
   --source-period 2026-08 \
@@ -66,12 +72,15 @@ michiana-radar build/august-2026-permits.pdf \
   --output build/elkhart-2026-08.json
 ~~~
 
+Commercial building permits are exported by default. Add
+`--include-noncommercial` for parser QA; those records remain hidden from alerts.
+
 The JSON output includes a `database` section with inserted, updated, unchanged,
 stored-permit and stored-project counts. Importing the same report twice should
 show zero inserts or updates on the second run.
 
+SQLite is built into Python, so this does not require a database account or server.
 The `build/` directory and common SQLite file extensions are ignored by Git.
-Raw reports, generated JSON and local databases should not be committed.
 
 ## Data source
 

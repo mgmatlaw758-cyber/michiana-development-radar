@@ -2,31 +2,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Sequence
 
-from pypdf import PdfReader
-
 from .grouping import group_permits
-from .parsers.elkhart import Page, parse_permit_pages
+from .parsers.elkhart import parse_permit_pages
+from .pdf import extract_pdf_pages
 from .storage import import_records
+from .sync import DEFAULT_SOURCE_PAGE_URL, sync_elkhart_year
 
-DEFAULT_SOURCE_URL = (
-    "https://www.elkhartcountyplanninganddevelopment.com/Building.html"
-)
-
-
-def extract_pdf_pages(path: Path) -> list[Page]:
-    reader = PdfReader(path)
-    return [
-        Page(number=index, text=page.extract_text() or "")
-        for index, page in enumerate(reader.pages, start=1)
-    ]
+DEFAULT_SOURCE_URL = DEFAULT_SOURCE_PAGE_URL
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Parse an Elkhart County monthly permit PDF."
+        description="Parse an Elkhart County monthly permit PDF.",
+        epilog=(
+            "For automatic yearly backfills, run: "
+            "michiana-radar sync-elkhart --help"
+        ),
     )
     parser.add_argument("pdf", type=Path, help="Downloaded county permit PDF")
     parser.add_argument(
@@ -59,7 +54,60 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def build_sync_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="michiana-radar sync-elkhart",
+        description=(
+            "Discover, download and import every published Elkhart County "
+            "monthly permit export for one year."
+        ),
+    )
+    parser.add_argument(
+        "--year",
+        type=int,
+        required=True,
+        help="Calendar year to synchronize, such as 2026",
+    )
+    parser.add_argument(
+        "--database",
+        type=Path,
+        required=True,
+        help="SQLite database that receives the synchronized permits",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path("build/source-cache/elkhart"),
+        help="Ignored directory used for downloaded county PDFs",
+    )
+    parser.add_argument(
+        "--source-page-url",
+        default=DEFAULT_SOURCE_PAGE_URL,
+        help="Official Elkhart County page containing monthly export links",
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Download reports again instead of using valid cached PDFs",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the synchronization summary to this JSON file",
+    )
+    return parser
+
+
+def _write_json(payload: dict[str, object], output_path: Path | None) -> None:
+    output = json.dumps(payload, indent=2, sort_keys=True)
+    if output_path is None:
+        print(output)
+        return
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(f"{output}\n", encoding="utf-8")
+
+
+def _run_parse_command(argv: Sequence[str]) -> int:
     args = build_parser().parse_args(argv)
     records = parse_permit_pages(
         extract_pdf_pages(args.pdf),
@@ -94,15 +142,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             **summary.to_dict(),
         }
 
-    output = json.dumps(payload, indent=2, sort_keys=True)
-
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(f"{output}\n", encoding="utf-8")
-    else:
-        print(output)
-
+    _write_json(payload, args.output)
     return 0
+
+
+def _run_sync_command(argv: Sequence[str]) -> int:
+    parser = build_sync_parser()
+    args = parser.parse_args(argv)
+    if args.year < 2017 or args.year > 2100:
+        parser.error("year must be between 2017 and 2100")
+
+    try:
+        payload = sync_elkhart_year(
+            year=args.year,
+            database_path=args.database,
+            cache_directory=args.cache_dir,
+            source_page_url=args.source_page_url,
+            refresh=args.refresh,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+    except Exception as exc:
+        print(f"sync-elkhart failed: {exc}", file=sys.stderr)
+        return 1
+
+    _write_json(payload, args.output)
+    return 1 if payload["failed_report_count"] else 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    raw_arguments = list(sys.argv[1:] if argv is None else argv)
+    if raw_arguments[:1] == ["sync-elkhart"]:
+        return _run_sync_command(raw_arguments[1:])
+    return _run_parse_command(raw_arguments)
 
 
 if __name__ == "__main__":
