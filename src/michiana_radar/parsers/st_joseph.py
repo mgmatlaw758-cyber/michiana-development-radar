@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
@@ -15,7 +16,7 @@ CURRENCY_RE = re.compile(r"\$\s*(?P<amount>\d[\d,\s]*(?:\.[\d\s]{1,2})?)")
 REPORT_DATE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")
 PAGE_NUMBER_RE = re.compile(r"^\d{1,3}$")
 REPORT_PERIOD_RE = re.compile(
-    r"^FOR\s+THE\s+MONTH\s+OF\s+[A-Z]+,?\s+\d{4}$",
+    r"^FOR\s+THE\s+MONTH\s+OF\s+(?P<month>[A-Z]+),?\s+(?P<year>\d{4})$",
     re.IGNORECASE,
 )
 DETAIL_RE = re.compile(
@@ -26,6 +27,26 @@ DETAIL_RE = re.compile(
 
 RAW_PERMIT_TYPE = "City-County Commercial Report"
 JURISDICTION = "St. Joseph County"
+MONTH_NUMBERS = {
+    month.casefold(): number
+    for number, month in enumerate(calendar.month_name)
+    if month
+}
+
+
+def report_period_from_pages(pages: Iterable[Page]) -> str | None:
+    for page in pages:
+        normalized = unicodedata.normalize("NFKC", page.text)
+        for raw_line in normalized.splitlines():
+            line = clean_whitespace(raw_line)
+            match = REPORT_PERIOD_RE.fullmatch(line)
+            if match is None:
+                continue
+            month = MONTH_NUMBERS.get(match.group("month").casefold())
+            if month is None:
+                continue
+            return f"{int(match.group('year')):04d}-{month:02d}"
+    return None
 
 
 def _lines(text: str) -> list[str]:
