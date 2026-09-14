@@ -240,7 +240,10 @@ def _party_candidates(lines: list[str], role: str) -> list[str]:
     target = role.casefold()
 
     for index, line in enumerate(lines):
-        if line.casefold() != target:
+        normalized_role = line.casefold()
+        if normalized_role.startswith("contacts:"):
+            normalized_role = normalized_role.partition(":")[2].strip()
+        if normalized_role != target:
             continue
 
         name_parts: list[str] = []
