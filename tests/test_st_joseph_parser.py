@@ -125,3 +125,43 @@ def test_description_can_contain_commas() -> None:
     assert record.project_type == "SIDING FOR BUILDINGS 15, 16, AND 19"
     assert record.site_address == "102 Falcon"
     assert record.township == "Portage"
+
+
+def test_coalesces_repeated_permit_number_scopes() -> None:
+    pages = [
+        Page(
+            number=1,
+            text="""
+            COMMERCIAL REPORT
+            4/1/2026
+            1
+            FOR THE MONTH OF MARCH, 2026
+            BD25009531 WAGGONERS DAIRY FARM INC % CHESTER W WAGGONER,
+            52129 SR 933, SOUTH BEND, High Pile Storage Racking,
+            5910 DYLAN, German, zoned I; Contractor: ZIGLIFT MATERIAL HANDLING
+            $672,724.38
+            BD25009531 WAGGONERS DAIRY FARM INC % CHESTER W WAGGONER,
+            52129 SR 933, SOUTH BEND, Exterior Security Fence, Security Island,
+            Dock Slab, 5910 DYLAN, German, zoned I;
+            Contractor: MAJORITY BUILDERS, INC. $199,000.00
+            """,
+        )
+    ]
+
+    records = parse_commercial_report_pages(
+        pages,
+        source_url=SOURCE_URL,
+        source_period="2026-03",
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.permit_number == "BD25009531"
+    assert record.project_type == "Multiple scopes"
+    assert record.estimated_cost == Decimal("871724.38")
+    assert record.site_address == "5910 DYLAN"
+    assert "High Pile Storage Racking" in record.description
+    assert "Exterior Security Fence" in record.description
+    assert record.owner_business == "WAGGONERS DAIRY FARM INC % CHESTER W WAGGONER"
+    assert record.general_contractor == "MAJORITY BUILDERS, INC."
+    assert record.source.pages == (1,)
