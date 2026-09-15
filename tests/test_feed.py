@@ -58,6 +58,7 @@ def test_feed_summarizes_and_groups_stored_projects(tmp_path: Path) -> None:
     assert payload["facets"]["project_types"] == ["New building"]
 
     first = payload["projects"][0]
+    assert first["first_imported_at"]
     assert first["jurisdiction"] == "Elkhart County"
     assert first["permit_count"] == 2
     assert first["listed_permit_value_total"] == "520000.00"
@@ -66,11 +67,23 @@ def test_feed_summarizes_and_groups_stored_projects(tmp_path: Path) -> None:
 
 def test_feed_searches_and_filters_projects(tmp_path: Path) -> None:
     database_path = build_database(tmp_path)
-
+    newly_added = query_project_feed(
+        database_path,
+        added_within_days=7,
+    )
+    assert newly_added["result_count"] == 3
     jurisdiction_match = query_project_feed(
         database_path,
         jurisdiction="Elkhart County",
     )
+    with pytest.raises(
+        ValueError,
+        match="added_within_days must be between 1 and 365",
+    ):
+        query_project_feed(
+            database_path,
+            added_within_days=0,
+        )
     assert jurisdiction_match["result_count"] == 3
 
     jurisdiction_miss = query_project_feed(

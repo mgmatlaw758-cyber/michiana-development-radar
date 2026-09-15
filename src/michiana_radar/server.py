@@ -133,7 +133,20 @@ DASHBOARD_HTML = r"""<!doctype html>
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
+    #newly-added {
+      border-color: #355c72;
+      background: #132d3b;
+      color: #9edcff;
+    }
 
+    #newly-added:hover {
+      border-color: #8fc8ff;
+    }
+
+    #newly-added.active {
+      outline: 2px solid #8fc8ff;
+      outline-offset: 2px;
+    }
     .result-line {
       min-height: 52px;
       display: flex;
@@ -370,6 +383,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <option value="oldest">Oldest first</option>
         </select>
       </label>
+      <button id="newly-added" type="button">✨ Newly Added</button>
       <button id="high-value" type="button">★ High Value Opportunities</button>
       <button id="reset" type="button">Clear filters</button>
     </section>
@@ -418,6 +432,7 @@ DASHBOARD_HTML = r"""<!doctype html>
       var status = document.getElementById("result-status");
       var requestNumber = 0;
       var debounceTimer;
+      var addedWithinDays = "";
 
       function escapeHtml(value) {
         return String(value == null ? "" : value).replace(/[&<>"']/g, function (character) {
@@ -598,6 +613,9 @@ DASHBOARD_HTML = r"""<!doctype html>
         if (controls.jurisdiction.value) {
           params.set("jurisdiction", controls.jurisdiction.value);
         }
+        if (addedWithinDays) {
+          params.set("added_within_days", addedWithinDays);
+        }
         if (controls.city.value) params.set("city", controls.city.value);
         if (controls.projectType.value) {
           params.set("project_type", controls.projectType.value);
@@ -646,6 +664,17 @@ DASHBOARD_HTML = r"""<!doctype html>
         loadProjects();
       });
       controls.sort.addEventListener("change", loadProjects);
+      document.getElementById("newly-added").addEventListener("click", function () {
+        if (addedWithinDays === "7") {
+          addedWithinDays = "";
+          this.classList.remove("active");
+        } else {
+          addedWithinDays = "7";
+          this.classList.add("active");
+        }
+
+        loadProjects();
+      });
       document.getElementById("high-value").addEventListener("click", function () {
         controls.minValue.value = "250000";
         controls.sort.value = "value_desc";
@@ -657,6 +686,8 @@ DASHBOARD_HTML = r"""<!doctype html>
         controls.projectType.value = "";
         controls.minValue.value = "";
         controls.sort.value = "newest";
+        addedWithinDays = "";
+        document.getElementById("newly-added").classList.remove("active");
         document.getElementById("high-value").classList.remove("active");
         loadProjects();
       });
@@ -1116,6 +1147,11 @@ class RadarRequestHandler(BaseHTTPRequestHandler):
                 self.server.database_path,
                 search=first("q"),
                 jurisdiction=first("jurisdiction"),
+                added_within_days=(
+                    int(first("added_within_days"))
+                    if first("added_within_days")
+                    else None
+                ),
                 city=first("city"),
                 project_type=first("project_type"),
                 contractor=first("contractor"),

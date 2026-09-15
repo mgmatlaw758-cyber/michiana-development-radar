@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -79,7 +80,8 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
                     permits.parcel_numbers_json,
                     permits.source_url,
                     permits.source_period,
-                    permits.source_pages_json
+                    permits.source_pages_json,
+                    permits.first_imported_at
                 FROM projects
                 JOIN project_permits USING (project_id)
                 JOIN permits USING (record_id)
@@ -129,6 +131,7 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
                 "owner_business": row["owner_business"],
                 "general_contractor": row["general_contractor"],
                 "parcel_numbers": _json_strings(row["parcel_numbers_json"]),
+                "first_imported_at": row["first_imported_at"],
                 "source_url": row["source_url"],
                 "source_period": row["source_period"],
                 "source_pages": [
@@ -162,6 +165,11 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
             for permit in permits
             if permit["issued_date"]
         ]
+        imported_dates = [
+            permit["first_imported_at"]
+            for permit in permits
+            if permit["first_imported_at"]
+        ]
 
         def first_value(field: str) -> str:
             value = primary.get(field)
@@ -183,6 +191,7 @@ def _load_projects(database_path: Path) -> list[dict[str, Any]]:
                     permit["permit_number"] for permit in permits
                 ],
                 "latest_issued_date": max(latest_dates, default=None),
+                "first_imported_at": min(imported_dates, default=None),
                 "project_type": first_value("project_type"),
                 "description": first_value("description"),
                 "jurisdiction": first_value("jurisdiction"),
@@ -260,6 +269,7 @@ def query_project_feed(
     *,
     search: str = "",
     jurisdiction: str = "",
+    added_within_days: int | None = None,
     city: str = "",
     project_type: str = "",
     contractor: str = "",
@@ -277,6 +287,9 @@ def query_project_feed(
         raise ValueError("limit must be between 1 and 200")
     if offset < 0:
         raise ValueError("offset cannot be negative")
+    if added_within_days is not None:
+        if added_within_days < 1 or added_within_days > 365:
+            raise ValueError("added_within_days must be between 1 and 365")
 
     minimum = _optional_money(min_value, "min_value")
     maximum = _optional_money(max_value, "max_value")
@@ -287,6 +300,11 @@ def query_project_feed(
     normalized_search = search.strip().casefold()
     normalized_jurisdiction = jurisdiction.strip().casefold()
     normalized_city = city.strip().casefold()
+    added_cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=added_within_days)
+        if added_within_days is not None
+        else None
+    )
     normalized_type = project_type.strip().casefold()
     normalized_contractor = contractor.strip().casefold()
 
@@ -300,6 +318,14 @@ def query_project_feed(
             and project["jurisdiction"].casefold() != normalized_jurisdiction
         ):
             continue
+        if added_cutoff is not None:
+            first_imported_at = project.get("first_imported_at")
+            if not first_imported_at:
+                continue
+
+            imported_at = datetime.fromisoformat(first_imported_at)
+            if imported_at < added_cutoff:
+                continue
         if normalized_city and project["city"].casefold() != normalized_city:
             continue
         if normalized_type and normalized_type not in {
