@@ -92,6 +92,17 @@ def test_feed_searches_and_filters_projects(tmp_path: Path) -> None:
     )
     assert jurisdiction_miss["result_count"] == 0
 
+    recently_discovered = query_project_feed(
+        database_path,
+        sort="discovered_desc",
+    )
+
+    assert recently_discovered["result_count"] == 3
+    assert all(
+        project["first_imported_at"]
+        for project in recently_discovered["projects"]
+    )
+
     contractor_match = query_project_feed(
         database_path,
         search="clinton builders",

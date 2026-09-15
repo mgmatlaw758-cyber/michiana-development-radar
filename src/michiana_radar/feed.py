@@ -8,7 +8,9 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-VALID_SORTS = frozenset({"newest", "oldest", "value_desc", "value_asc"})
+VALID_SORTS = frozenset(
+    {"newest", "oldest", "value_desc", "value_asc", "discovered_desc"}
+)
 PROJECT_ID_RE = re.compile(r"^project-[0-9a-f]{14}$")
 
 
@@ -367,6 +369,15 @@ def query_project_feed(
                 project["latest_issued_date"] or "9999-12-31",
                 project["project_id"],
             )
+        )
+    elif sort == "discovered_desc":
+        filtered.sort(
+            key=lambda project: (
+                project["first_imported_at"] or "",
+                _money(project["listed_permit_value_total"]),
+                project["project_id"],
+            ),
+            reverse=True,
         )
     elif sort == "value_desc":
         filtered.sort(

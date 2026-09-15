@@ -378,6 +378,7 @@ DASHBOARD_HTML = r"""<!doctype html>
         Sort
         <select id="sort">
           <option value="newest">Newest first</option>
+          <option value="discovered_desc">Recently discovered by Radar</option>
           <option value="value_desc">Highest value</option>
           <option value="value_asc">Lowest value</option>
           <option value="oldest">Oldest first</option>
