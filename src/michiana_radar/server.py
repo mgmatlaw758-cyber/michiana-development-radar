@@ -119,6 +119,20 @@ DASHBOARD_HTML = r"""<!doctype html>
       align-self: end;
     }
     button:hover { border-color: var(--accent); }
+    #high-value {
+      border-color: #65481a;
+      background: var(--accent-soft);
+      color: #ffd07a;
+    }
+
+    #high-value:hover {
+      border-color: var(--accent);
+    }
+
+    #high-value.active {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
 
     .result-line {
       min-height: 52px;
@@ -128,6 +142,31 @@ DASHBOARD_HTML = r"""<!doctype html>
       gap: 16px;
       color: var(--muted);
       font-size: .9rem;
+    }
+    .opportunity-snapshot {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .opportunity-snapshot div {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(18, 26, 34, .94);
+      padding: 16px 18px;
+    }
+
+    .opportunity-snapshot span {
+      display: block;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .opportunity-snapshot strong {
+      font-size: 1.5rem;
     }
     .feed { display: grid; gap: 14px; padding-bottom: 60px; }
     .card { border-radius: 16px; overflow: hidden; }
@@ -207,6 +246,9 @@ DASHBOARD_HTML = r"""<!doctype html>
     @media (max-width: 600px) {
       .shell { width: min(100% - 20px, 1180px); }
       header { padding-top: 28px; }
+      .opportunity-snapshot {
+        grid-template-columns: 1fr;
+      }
       .summary { grid-template-columns: 1fr; }
       .controls { grid-template-columns: 1fr; }
       .search-field { grid-column: auto; }
@@ -263,6 +305,7 @@ DASHBOARD_HTML = r"""<!doctype html>
           <option value="oldest">Oldest first</option>
         </select>
       </label>
+      <button id="high-value" type="button">★ High Value Opportunities</button>
       <button id="reset" type="button">Clear filters</button>
     </section>
 
@@ -270,6 +313,16 @@ DASHBOARD_HTML = r"""<!doctype html>
       <span id="result-status" role="status" aria-live="polite">Loading projects...</span>
       <span id="latest-date"></span>
     </div>
+    <section class="opportunity-snapshot" aria-label="Opportunity snapshot">
+    <div>
+      <span>Matching projects</span>
+      <strong id="snapshot-projects">...</strong>
+    </div>
+    <div>
+      <span>Matching listed value</span>
+      <strong id="snapshot-value">...</strong>
+    </div>
+    </section>
     <section id="feed" class="feed" aria-label="Project results"></section>
   </main>
 
@@ -406,6 +459,10 @@ DASHBOARD_HTML = r"""<!doctype html>
           data.summary.permit_count.toLocaleString();
         document.getElementById("total-value").textContent =
           money(data.summary.listed_value_total);
+        document.getElementById("snapshot-projects").textContent =
+          data.filtered_summary.project_count.toLocaleString();
+        document.getElementById("snapshot-value").textContent =
+          money(data.filtered_summary.listed_value_total);
         document.getElementById("latest-date").textContent =
           data.summary.latest_issued_date
             ? "Updated through " + dateLabel(data.summary.latest_issued_date)
@@ -483,13 +540,25 @@ DASHBOARD_HTML = r"""<!doctype html>
       controls.city.addEventListener("change", loadProjects);
       controls.jurisdiction.addEventListener("change", loadProjects);
       controls.projectType.addEventListener("change", loadProjects);
+      document.getElementById("high-value").addEventListener("click", function () {
+        controls.minValue.value = "250000";
+        controls.sort.value = "value_desc";
+        this.classList.add("active");
+        loadProjects();
+      });
       controls.sort.addEventListener("change", loadProjects);
+      document.getElementById("high-value").addEventListener("click", function () {
+        controls.minValue.value = "250000";
+        controls.sort.value = "value_desc";
+        loadProjects();
+      });
       document.getElementById("reset").addEventListener("click", function () {
         controls.search.value = "";
         controls.city.value = "";
         controls.projectType.value = "";
         controls.minValue.value = "";
         controls.sort.value = "newest";
+        document.getElementById("high-value").classList.remove("active");
         loadProjects();
       });
 

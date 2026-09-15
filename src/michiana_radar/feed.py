@@ -351,6 +351,13 @@ def query_project_feed(
         )
 
     result_count = len(filtered)
+    filtered_value_total = sum(
+        (
+            _money(project["listed_permit_value_total"])
+            for project in filtered
+        ),
+        Decimal("0"),
+    )
     page = filtered[offset : offset + limit]
     all_permits = [
         permit
@@ -401,6 +408,10 @@ def query_project_feed(
         },
         "result_count": result_count,
         "returned_count": len(page),
+        "filtered_summary": {
+            "project_count": result_count,
+            "listed_value_total": str(filtered_value_total),
+        },
         "limit": limit,
         "offset": offset,
         "projects": page,

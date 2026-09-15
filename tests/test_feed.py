@@ -95,6 +95,11 @@ def test_feed_searches_and_filters_projects(tmp_path: Path) -> None:
         "BC-0471-2026",
         "BC-0469-2026",
     ]
+    assert value_match["filtered_summary"]["project_count"] == 1
+    assert (
+        value_match["filtered_summary"]["listed_value_total"]
+        == "520000.00"
+    )
 
     permit_match = query_project_feed(
         database_path,
