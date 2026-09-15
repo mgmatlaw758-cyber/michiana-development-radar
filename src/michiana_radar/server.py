@@ -168,6 +168,71 @@ DASHBOARD_HTML = r"""<!doctype html>
     .opportunity-snapshot strong {
       font-size: 1.5rem;
     }
+    .top-section {
+      margin-bottom: 24px;
+    }
+
+    .top-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .top-heading span {
+      color: var(--accent);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .top-heading h2 {
+      margin: 4px 0 0;
+    }
+
+    .top-heading small {
+      color: var(--muted);
+    }
+
+    .top-opportunities {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    .top-card {
+      display: block;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(18, 26, 34, .94);
+      padding: 15px;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .top-card:hover {
+      border-color: var(--accent);
+    }
+
+    .top-card strong {
+      display: block;
+      color: var(--green);
+      font-size: 1.25rem;
+      margin-bottom: 8px;
+    }
+
+    .top-card .top-type {
+      display: block;
+      font-weight: 750;
+      margin-bottom: 7px;
+    }
+
+    .top-card .top-jurisdiction {
+      color: var(--muted);
+      font-size: .8rem;
+    }
     .feed { display: grid; gap: 14px; padding-bottom: 60px; }
     .card { border-radius: 16px; overflow: hidden; }
     .card-main { padding: 20px; }
@@ -323,6 +388,17 @@ DASHBOARD_HTML = r"""<!doctype html>
       <strong id="snapshot-value">...</strong>
     </div>
     </section>
+    <section class="top-section" aria-label="Top opportunities">
+  <div class="top-heading">
+    <div>
+      <span>Priority view</span>
+      <h2>Top Opportunities</h2>
+    </div>
+    <small>Highest listed permit values matching your filters</small>
+  </div>
+
+  <div id="top-opportunities" class="top-opportunities"></div>
+</section>
     <section id="feed" class="feed" aria-label="Project results"></section>
   </main>
 
@@ -396,6 +472,20 @@ DASHBOARD_HTML = r"""<!doctype html>
         }
       }
 
+      function topOpportunityCard(project) {
+        return '<a class="top-card" href="/projects/' +
+          encodeURIComponent(project.project_id) + '">' +
+            '<strong>' +
+              escapeHtml(money(project.listed_permit_value_total)) +
+            '</strong>' +
+            '<span class="top-type">' +
+              escapeHtml(project.project_type || "Commercial project") +
+            '</span>' +
+            '<span class="top-jurisdiction">' +
+              escapeHtml(project.jurisdiction || "Jurisdiction not listed") +
+            '</span>' +
+          '</a>';
+      }
       function projectCard(project) {
         var location = [
           project.site_address,
@@ -463,6 +553,15 @@ DASHBOARD_HTML = r"""<!doctype html>
           data.filtered_summary.project_count.toLocaleString();
         document.getElementById("snapshot-value").textContent =
           money(data.filtered_summary.listed_value_total);
+        var topOpportunities = document.getElementById("top-opportunities");
+
+        if (data.top_opportunities.length) {
+          topOpportunities.innerHTML =
+            data.top_opportunities.map(topOpportunityCard).join("");
+        } else {
+          topOpportunities.innerHTML =
+            '<div class="empty">No matching opportunities.</div>';
+        }
         document.getElementById("latest-date").textContent =
           data.summary.latest_issued_date
             ? "Updated through " + dateLabel(data.summary.latest_issued_date)

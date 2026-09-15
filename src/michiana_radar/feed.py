@@ -316,6 +316,16 @@ def query_project_feed(
             continue
         filtered.append(project)
 
+    top_opportunities = sorted(
+        filtered,
+        key=lambda project: (
+            _money(project["listed_permit_value_total"]),
+            project["latest_issued_date"] or "",
+            project["project_id"],
+        ),
+        reverse=True,
+    )[:5]
+
     if sort == "newest":
         filtered.sort(
             key=lambda project: (
@@ -412,6 +422,7 @@ def query_project_feed(
             "project_count": result_count,
             "listed_value_total": str(filtered_value_total),
         },
+        "top_opportunities": top_opportunities,
         "limit": limit,
         "offset": offset,
         "projects": page,

@@ -52,6 +52,7 @@ def test_feed_summarizes_and_groups_stored_projects(tmp_path: Path) -> None:
     }
     assert payload["result_count"] == 3
     assert payload["returned_count"] == 3
+    assert len(payload["top_opportunities"]) == 3
     assert payload["facets"]["jurisdictions"] == ["Elkhart County"]
     assert payload["facets"]["cities"] == ["Goshen"]
     assert payload["facets"]["project_types"] == ["New building"]
@@ -100,6 +101,7 @@ def test_feed_searches_and_filters_projects(tmp_path: Path) -> None:
         value_match["filtered_summary"]["listed_value_total"]
         == "520000.00"
     )
+    assert value_match["top_opportunities"][0]["listed_permit_value_total"] == "520000.00"
 
     permit_match = query_project_feed(
         database_path,
