@@ -126,10 +126,11 @@ def main() -> int:
     config.cache_directory.mkdir(parents=True, exist_ok=True)
 
     database_missing = not config.database_path.is_file()
-    if config.sync_on_start or database_missing:
+
+    if database_missing:
         _run_sync(
             config,
-            reason="initial refresh" if database_missing else "startup refresh",
+            reason="initial refresh",
         )
 
     if not config.database_path.is_file():
@@ -138,6 +139,17 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    if config.sync_on_start and not database_missing:
+        startup_thread = threading.Thread(
+            target=_run_sync,
+            args=(config,),
+            kwargs={"reason": "startup refresh"},
+            name="radar-startup-sync",
+            daemon=True,
+        )
+        startup_thread.start()
+        print("[production] startup refresh running in background")
 
     if config.sync_interval_hours > 0:
         thread = threading.Thread(
